@@ -18,19 +18,18 @@ DOMAIN_STATES = {
     # libvirt.VIR_DOMAIN_RUNNING_WAKEUP : "waking", # 8
 }
 
+def _config_init(method):
+    def wrapped(*args, **kwargs):
+        if VirtuiConfig._options == None:
+            VirtuiConfig.loadconfig()
+        return method(*args, **kwargs)
+    return wrapped
+
 class VirtuiConfig(object):
     _options = None
 
-    def __init__(self, configfile, overrides=None):
-        super(VirtuiConfig, self).__init__()
-        if overrides is None:
-            overrides = {}
-        self._options = self._default()
-        self._options_update(self._configfile(configfile))
-        self._options_update(self._env())
-        self._options_update(overrides)
-
-    def _default(self):
+    @staticmethod
+    def _default():
         return {
             'general' : {
                 'LIBVIRT_URI' : "qemu:///system",
@@ -88,33 +87,49 @@ class VirtuiConfig(object):
             }
         }
 
-    def _configfile(self, configfile):
+
+    @staticmethod
+    def _configfile(configfile):
         parser = RawConfigParser()
         parser.read(os.path.expanduser(configfile))
         # make two dimentional dict from config file
         return dict([(section, dict(parser.items(section))) for section in parser.sections()])
 
-    def _env(self):
+    @staticmethod
+    def _env():
         overrides = {}
-        for key in self._options['general'].keys():
+        for key in VirtuiConfig._options['general'].keys():
             if key.upper() in os.environ:
                 overrides[key] = os.environ[key.upper()]
         return {'general' : overrides}
 
-    def _options_update(self, updates):
+    @staticmethod
+    def _options_update(updates):
         for (key, section) in updates.iteritems():
             for (name, value) in section.iteritems():
-                self._options[key][name] = value
+                VirtuiConfig._options[key][name] = value
 
-    def general(self, option, overrides=None):
+    @staticmethod
+    def loadconfig(configfile = None, overrides = None, load_env = False):
+        if overrides is None:
+            overrides = {}
+        VirtuiConfig._options = VirtuiConfig._default()
+        if configfile is not None:
+            VirtuiConfig._options_update(VirtuiConfig._configfile(configfile))
+        VirtuiConfig._options_update(VirtuiConfig._env())
+        VirtuiConfig._options_update(overrides)        
+
+    @staticmethod
+    @_config_init
+    def general(option, overrides=None):
         try:
-            value = self._options['general'][option]
+            value = VirtuiConfig._options['general'][option]
         except KeyError:
             return None
         try:
             if isinstance(value, str):
                 replacements = dict()
-                replacements.update(self._options['general'])
+                replacements.update(VirtuiConfig._options['general'])
                 if overrides is not None:
                     replacements.update(overrides)
                 value %= replacements
@@ -122,13 +137,17 @@ class VirtuiConfig(object):
             pass
         return value
 
-    def templates(self):
-        for key in self._options.keys():
+    @staticmethod
+    @_config_init
+    def templates():
+        for key in VirtuiConfig._options.keys():
             if key.startswith('template-'):
                 yield key.replace('template-', '', 1)
 
-    def template(self, name):
-        return self._options['template-%s' % name]
+    @staticmethod
+    @_config_init
+    def template(name):
+        return VirtuiConfig._options['template-%s' % name]
 
 class Connection(object):
     _conn = None
@@ -244,14 +263,14 @@ class Domain(object):
 
 def main(args):
     ended = False
-    config = VirtuiConfig('~/.virtui.conf')
-    conn = Connection(config.general('LIBVIRT_URI'))
+    VirtuiConfig.loadconfig('~/.virtui.conf')
+    conn = Connection(VirtuiConfig.general('LIBVIRT_URI'))
     while not ended:
         domain = select_domain(conn)
         if domain == None:
             ended = True
             break
-        manage_domain(domain, config)
+        manage_domain(domain)
 
 def __generate_options(options):
     """If options is dict object, transform to list of (key, value).
@@ -303,18 +322,18 @@ def select_domain(conn):
         return None
     return [dom for dom in domains if dom.name == selected][0]
 
-def manage_domain(domain, config):
+def manage_domain(domain):
     actions = []
     info = domain_info(domain)
     if domain.isActive():
         actions += [
-            ('console', lambda: start_console(domain, config)),
-            ('viewer', lambda: start_viewer(domain, config)),
+            ('console', lambda: start_console(domain)),
+            ('viewer', lambda: start_viewer(domain)),
         ]
         if domain.isOnline():
             actions += [
-                ('ssh', lambda: start_ssh(domain, config)),
-                ('vnc', lambda: start_vnc(domain, config)),
+                ('ssh', lambda: start_ssh(domain)),
+                ('vnc', lambda: start_vnc(domain)),
             ]
     actions += domain.actions()
     print """Domain: {name}
@@ -350,9 +369,9 @@ def __join_command(command):
         ]
     )
 
-def _run_command(command, config, terminal=False, terminal_title=''):
+def _run_command(command, terminal=False, terminal_title=''):
     if terminal:
-        terminal_command = shlex.split(config.general('terminal_command'))
+        terminal_command = shlex.split(VirtuiConfig.general('terminal_command'))
         try:
             index = terminal_command.index('%(command_list)s')
             terminal_command[index:index+1] = command
@@ -377,17 +396,17 @@ def _run_command(command, config, terminal=False, terminal_title=''):
                      stderr=_null_file('w'))
 
 
-def start_console(domain, config):
+def start_console(domain):
     replacement = {'domain_name' : domain.name}
-    cmd = shlex.split(config.general('console', replacement))
-    _run_command(cmd, config, config.general('console_terminal'), 'Console %s' % domain.name)
+    cmd = shlex.split(VirtuiConfig.general('console', replacement))
+    _run_command(cmd, VirtuiConfig.general('console_terminal'), 'Console %s' % domain.name)
 
-def start_viewer(domain, config):
+def start_viewer(domain):
     replacement = {'domain_name' : domain.name}
-    cmd = shlex.split(config.general('viewer', replacement))
-    _run_command(cmd, config, config.general('viewer_terminal'), 'Viewer %s' % domain.name)
+    cmd = shlex.split(VirtuiConfig.general('viewer', replacement))
+    _run_command(cmd, VirtuiConfig.general('viewer_terminal'), 'Viewer %s' % domain.name)
 
-def start_ssh(domain, config):
+def start_ssh(domain):
     IPs = [IP[1] for IP in domain.nics]
     if len(IPs) == 0:
         print "No network connection on host %s" % domain.name
@@ -400,10 +419,10 @@ def start_ssh(domain, config):
         'user' : 'root',
         'hostname' : IP,
     }
-    cmd = shlex.split(config.general('ssh', replacement))
-    _run_command(cmd, config, config.general('ssh_terminal'), 'SSH %s' % domain.name,)
+    cmd = shlex.split(VirtuiConfig.general('ssh', replacement))
+    _run_command(cmd, VirtuiConfig.general('ssh_terminal'), 'SSH %s' % domain.name,)
 
-def start_vnc(domain, config):
+def start_vnc(domain):
     IPs = [IP[1] for IP in domain.nics]
     if len(IPs) == 0:
         print "No network connection on host %s" % domain.name
@@ -416,8 +435,8 @@ def start_vnc(domain, config):
         'hostname' : IP,
         'port' : 1,
     }
-    cmd = shlex.split(config.general('vnc', replacement))
-    _run_command(cmd, config, config.general('vnc_terminal'), 'Vncviewer %s' % domain.name)
+    cmd = shlex.split(VirtuiConfig.general('vnc', replacement))
+    _run_command(cmd, VirtuiConfig.general('vnc_terminal'), 'Vncviewer %s' % domain.name)
 
 def _null_file(mode='r'):
     return file('/dev/null', mode)
