@@ -110,13 +110,14 @@ class VirtuiConfig(object):
                 VirtuiConfig._options[key][name] = value
 
     @staticmethod
-    def loadconfig(configfile = None, overrides = None, load_env = False):
+    def loadconfig(configfile=None, overrides=None, load_env=False):
         if overrides is None:
             overrides = {}
         VirtuiConfig._options = VirtuiConfig._default()
         if configfile is not None:
             VirtuiConfig._options_update(VirtuiConfig._configfile(configfile))
-        VirtuiConfig._options_update(VirtuiConfig._env())
+        if load_env:
+            VirtuiConfig._options_update(VirtuiConfig._env())
         VirtuiConfig._options_update(overrides)        
 
     @staticmethod
