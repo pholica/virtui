@@ -25,6 +25,9 @@ def _config_init(method):
         return method(*args, **kwargs)
     return wrapped
 
+def _new_groupid():
+    os.setpgid(os.getpid(), os.getpid())
+
 class VirtuiConfig(object):
     _options = None
 
@@ -394,7 +397,9 @@ def _run_command(command, terminal=False, terminal_title=''):
     subprocess.Popen(command,
                      stdin=_null_file(),
                      stdout=_null_file('w'),
-                     stderr=_null_file('w'))
+                     stderr=_null_file('w'),
+                     preexec_fn=_new_groupid,
+    )
 
 
 def start_console(domain):
