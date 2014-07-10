@@ -386,7 +386,10 @@ def _run_command(command, terminal=False, terminal_title=''):
             'command' : __join_command(command),
             'title' : terminal_title,
         }
-        command = [ arg % final_substitutions for arg in command ]
+        try:
+            command = [ arg % final_substitutions for arg in command ]
+        except KeyError:
+            print >>sys.stderr, "Failed to substitute some portions of command: %s" % str(command)
 
     subprocess.Popen(command,
                      stdin=_null_file(),
