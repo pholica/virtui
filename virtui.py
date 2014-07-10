@@ -382,17 +382,11 @@ def _run_command(command, terminal=False, terminal_title=''):
             command = terminal_command
         except ValueError:
             pass
-        try:
-            index = terminal_command.index('%(command)s')
-            terminal_command[index] = __join_command(command)
-            command = terminal_command
-        except ValueError:
-            pass
-        try:
-            index = command.index('%(title)s')
-            command[index] = terminal_title
-        except ValueError:
-            pass
+        final_substitutions = {
+            'command' : __join_command(command),
+            'title' : terminal_title,
+        }
+        command = [ arg % final_substitutions for arg in command ]
 
     subprocess.Popen(command,
                      stdin=_null_file(),
