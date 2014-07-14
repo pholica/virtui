@@ -28,6 +28,10 @@ def _config_init(method):
 def _new_groupid():
     os.setpgid(os.getpid(), os.getpid())
 
+def _change_terminal_title(title):
+    sys.stdout.write("\033]0;%s\007" % title)
+    sys.stdout.flush()
+
 class VirtuiConfig(object):
     _options = None
 
@@ -35,6 +39,7 @@ class VirtuiConfig(object):
     def _default():
         return {
             'general' : {
+                'virtui_terminal_title' : 'virtui',
                 'LIBVIRT_URI' : "qemu:///system",
                 'viewer' : 'virt-viewer --connect %(LIBVIRT_URI)s %(domain_name)s',
                 'viewer_terminal' : False,
@@ -268,6 +273,7 @@ class Domain(object):
 def main(args):
     ended = False
     VirtuiConfig.loadconfig('~/.virtui.conf')
+    _change_terminal_title(VirtuiConfig.general('virtui_terminal_title'))
     conn = Connection(VirtuiConfig.general('LIBVIRT_URI'))
     while not ended:
         domain = select_domain(conn)
