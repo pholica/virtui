@@ -327,7 +327,7 @@ def select_option(options, header="Select option:", prompt="#? "):
 
 def select_domain(conn):
     domains = conn.domains(inactive=True)
-    selected = select_option([dom.name for dom in domains])
+    selected = select_option(sorted([dom.name for dom in domains]))
     if selected == None:
         return None
     return [dom for dom in domains if dom.name == selected][0]
