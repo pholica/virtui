@@ -325,6 +325,25 @@ def select_option(options, header="Select option:", prompt="#? "):
 
     return selected
 
+def select_file(header="Select file.", preset=None, prompt="path: "):
+    """Print prompt asking user to select file.
+    When user doesn't enter any file path, preset is returned.
+    Keep asking until path of existing file is entered or EOF or SIGINT is
+    received.
+    """
+    while True:
+        print header
+        try:
+            filepath = raw_input(prompt)
+        except EOFError, KeyboardInterrupt:
+            print
+            return None
+        if filepath == "":
+            return preset
+        if os.path.exists(filepath):
+            return filepath
+        print "File not found!"
+
 def select_domain(conn):
     domains = conn.domains(inactive=True)
     selected = select_option(sorted([dom.name for dom in domains]))
