@@ -328,24 +328,40 @@ def __generate_options(options):
         return [(option, option) for option in options]
     return options
 
-def select_option(options, header="Select option:", prompt="#? "):
+def select_option(options, header="Select option:", prompt="#? ", other_options =None):
     """Print options and prompt asking user to select one.
     options can be either list of strings or list of tuples.
     When options is list of strings, value of option is returned.
     When options is list of tuples, first item returned.
     When options is dict, key is returned.
+    Can also specify other_options as tuples where first item is returned,
+    and second item needs to be one-character long and can be selected by user.
+
+    One can enter number => option of such index is selected.
+    One can enter one character => other_option of such shortcut is selected.
+    One can enter full option => option itself is selected.
     """
-    selected = None
-    while selected is None:
+    while True:
         num = 0
         print
         print header
+        if other_options is not None:
+            for (description, key) in other_options:
+                print "{0}] {1}".format(key, description)
+            print
         options = __generate_options(options)
         for (_, option) in options:
             num += 1
             print "{0}) {1}".format(num, option)
         try:
-            selected = options[int(raw_input(prompt))-1][0]
+            input_data = raw_input(prompt)
+            if input_data.isdigit():
+                return options[int(input_data)-1][0]
+            elif len(input_data) == 1 and other_options is not None:
+                return [opt[0] for opt in other_options if opt[1] == input_data][0]
+            else:
+                return [opt[1] for opt in options if opt[1] == input_data][0]
+
         except IndexError:
             pass
         except ValueError:
@@ -356,8 +372,6 @@ def select_option(options, header="Select option:", prompt="#? "):
         except KeyboardInterrupt:
             print
             return None
-
-    return selected
 
 def select_file(header="Select file.", preset=None, prompt="path: "):
     """Print prompt asking user to select file.
