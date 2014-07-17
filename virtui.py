@@ -132,7 +132,7 @@ class VirtuiConfig(object):
             VirtuiConfig._options_update(VirtuiConfig._configfile(configfile))
         if load_env:
             VirtuiConfig._options_update(VirtuiConfig._env())
-        VirtuiConfig._options_update(overrides)        
+        VirtuiConfig._options_update(overrides)
 
     @staticmethod
     @_config_init
@@ -328,7 +328,7 @@ def __generate_options(options):
         return [(option, option) for option in options]
     return options
 
-def select_option(options, header="Select option:", prompt="#? ", other_options =None):
+def select_option(options, header="Select option:", prompt="#? ", other_options=None):
     """Print options and prompt asking user to select one.
     options can be either list of strings or list of tuples.
     When options is list of strings, value of option is returned.
@@ -362,14 +362,9 @@ def select_option(options, header="Select option:", prompt="#? ", other_options 
             else:
                 return [opt[1] for opt in options if opt[1] == input_data][0]
 
-        except IndexError:
+        except (IndexError, ValueError):
             pass
-        except ValueError:
-            pass
-        except EOFError:
-            print
-            return None
-        except KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             print
             return None
 
@@ -384,7 +379,7 @@ def select_file(header="Select file.", preset=None, prompt="path: "):
         print header
         try:
             filepath = raw_input(prompt)
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             print
             return None
         if filepath == "":
@@ -502,7 +497,7 @@ def _run_command(command, terminal=False, terminal_title=''):
             'title' : terminal_title,
         }
         try:
-            command = [ arg % final_substitutions for arg in command ]
+            command = [arg % final_substitutions for arg in command]
         except KeyError:
             print >>sys.stderr, "Failed to substitute some portions of command: %s" % str(command)
 
