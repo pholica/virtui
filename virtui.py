@@ -332,6 +332,7 @@ def select_file(header="Select file.", preset=None, prompt="path: "):
     received.
     """
     while True:
+        print
         print header
         try:
             filepath = raw_input(prompt)
