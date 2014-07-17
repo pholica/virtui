@@ -395,9 +395,15 @@ def select_file(header="Select file.", preset=None, prompt="path: "):
 
 def select_domain(conn):
     domains = conn.domains(inactive=True)
-    selected = select_option(sorted([dom.name for dom in domains]))
+    selected = select_option(
+        sorted([dom.name for dom in domains]),
+        "Select domain:",
+        other_options=(('reload', 'r'),),
+    )
     if selected == None:
         return None
+    if selected == 'reload':
+        return select_domain(conn)
     return [dom for dom in domains if dom.name == selected][0]
 
 def select_cdrom(domain):
