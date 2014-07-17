@@ -25,6 +25,12 @@ def _config_init(method):
         return method(*args, **kwargs)
     return wrapped
 
+def _first_or_None(l):
+    try:
+        return l[0]
+    except IndexError:
+        return None
+
 def _new_groupid():
     os.setpgid(os.getpid(), os.getpid())
 
@@ -231,6 +237,26 @@ class Domain(object):
     def shutdown(self):
         self._domain.shutdown()
 
+    def cdrom_image(self, device):
+        medias = "//devices/disk[target/@dev='%s']/source/@dev" % device
+        return _first_or_None(self._query_xml(medias))
+
+    def change_cdrom(self, device, image):
+        if image is None:
+            xml = """<disk type='block' device='cdrom'>
+  <driver name='qemu' type='raw' />
+  <target dev='%s' bus='ide' />
+  <readonly />
+</disk>""" % device
+        else:
+            xml = """<disk type='block' device='cdrom'>
+  <driver name='qemu' type='raw' />
+  <target dev='%s' bus='ide' />
+  <source dev='%s' />
+  <readonly />
+</disk>""" % (device, image)
+        self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
+
     def remove(self):
         self._domain.undefine()
         self._domain = None
@@ -259,6 +285,14 @@ class Domain(object):
             retval.append((mac, IP))
         arpcache.close()
         return retval
+
+    @property
+    def cdroms(self):
+        devices = "//devices/disk[@device='cdrom']/target/@dev"
+        return [
+            (dev, self.cdrom_image(dev))
+            for dev in self._query_xml(devices)
+        ]
 
     @property
     def xml(self):
@@ -352,6 +386,18 @@ def select_domain(conn):
         return None
     return [dom for dom in domains if dom.name == selected][0]
 
+def select_cdrom(domain):
+    if len(domain.cdroms) == 0:
+        return None
+    if len(domain.cdroms) == 1:
+        return domain.cdroms[0][0]
+    else:
+        options = [
+            (dev, '%s (%s)' % (dev, path))
+            for dev, path in domain.cdroms
+        ]
+        return select_option(options, "Select cdrom:")
+
 def manage_domain(domain):
     actions = []
     info = domain_info(domain)
@@ -360,6 +406,10 @@ def manage_domain(domain):
             ('console', lambda: start_console(domain)),
             ('viewer', lambda: start_viewer(domain)),
         ]
+        if domain.cdroms:
+            actions += [
+                ('change CD/DVD', lambda: manage_cdrom(domain)),
+            ]
         if domain.isOnline():
             actions += [
                 ('ssh', lambda: start_ssh(domain)),
@@ -383,6 +433,25 @@ Nics and IPs:""".format(**info)
         actions[action]()
     else:
         print 'Unhandled action: %s' % action
+
+def manage_cdrom(domain):
+    cdrom = select_cdrom(domain)
+    header = '%s cdrom %s (%s) action:' % (
+        domain.name,
+        cdrom,
+        domain.cdrom_image(cdrom)
+    )
+    action = select_option(['eject', 'change'], header)
+    if action == None:
+        return
+    elif action == 'eject':
+        domain.change_cdrom(cdrom, None)
+    else:
+        image = select_file("Select image for %s cdrom %s" %
+                            (domain.name, cdrom))
+        if image is None:
+            return
+        domain.change_cdrom(cdrom, image)
 
 def domain_info(domain):
     return {
