@@ -56,6 +56,9 @@ class VirtuiConfig(object):
                 'console' : 'virsh --connect %(LIBVIRT_URI)s console %(domain_name)s',
                 'console_terminal' : True,
                 'terminal_command' : 'xterm -T %(title)s -e %(command_list)s',
+                'domain_list_format' : '{name}\t{on} {ips}',
+                'domain_on_format' : '[ON]',
+                'domain_off_format' : '[OFF]',
             },
             'template-simple' : {
                 'virt-type' : 'kvm',
@@ -262,6 +265,18 @@ class Domain(object):
         self._domain = None
         self._name = None
 
+    def short_status(self):
+        """Function that returns status string that is appended in menu."""
+        # variables containing status strings
+        power = VirtuiConfig.general('domain_on_format') \
+                if self.isActive() else VirtuiConfig.general('domain_off_format')
+        iplist = ','.join([nic[1] for nic in self.nics if nic[1] != None])
+
+        sts = VirtuiConfig.general('domain_list_format').format(name=self.name,
+                                                                on=power,
+                                                                ips=iplist)
+        return sts
+
     @property
     def name(self):
         return self._name
@@ -390,8 +405,9 @@ def select_file(header="Select file.", preset=None, prompt="path: "):
 
 def select_domain(conn):
     domains = conn.domains(inactive=True)
+    menuitems = sorted([(dom.name, dom.short_status()) for dom in domains])
     selected = select_option(
-        sorted([dom.name for dom in domains]),
+        menuitems,
         "Select domain:",
         other_options=(('reload', 'r'),),
     )
