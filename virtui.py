@@ -57,7 +57,7 @@ class VirtuiConfig(object):
                 'console_terminal' : True,
                 'terminal_command' : 'xterm -T %(title)s -e %(command_list)s',
                 'domain_list_format' : '{name}\t{on} {ips}',
-                'domain_on_format' : '[ON]',
+                'domain_on_format' : '[ON] ',
                 'domain_off_format' : '[OFF]',
             },
             'template-simple' : {
