@@ -258,7 +258,11 @@ class Domain(object):
   <source dev='%s' />
   <readonly />
 </disk>""" % (device, image)
-        self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
+        try:
+            self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
+            return True
+        except libvirt.libvirtError:
+            return False
 
     def remove(self):
         self._domain.undefine()
