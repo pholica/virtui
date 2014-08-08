@@ -6,18 +6,6 @@ import libxml2
 import subprocess, shlex
 from ConfigParser import RawConfigParser
 
-DOMAIN_STATES = {
-    # libvirt.VIR_DOMAIN_NONE : "none", # 0
-    libvirt.VIR_DOMAIN_RUNNING : "on", # 1
-    # libvirt.VIR_DOMAIN_BLOCKED : "blocked", # 2
-    libvirt.VIR_DOMAIN_PAUSED : "paused", # 3
-    # libvirt.VIR_DOMAIN_SHUTDOWN : "shutdown", # 4 - not sure about status
-    libvirt.VIR_DOMAIN_SHUTOFF : "off", # 5
-    # libvirt.VIR_DOMAIN_CRASHED : "crashed", # 6
-    # libvirt.VIR_DOMAIN_PMSUSPENDED : "suspended", # 7
-    # libvirt.VIR_DOMAIN_RUNNING_WAKEUP : "waking", # 8
-}
-
 def _config_init(method):
     def wrapped(*args, **kwargs):
         if VirtuiConfig._options == None:
