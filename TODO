@@ -1,1 +1,2 @@
+Add support for helper scripts (via decorator specifying that helper script can be used instead of python function). Helper scripts are defined in configuration.
 Add support for creating new systems (using config and helper scripts).
