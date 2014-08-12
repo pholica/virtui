@@ -1,6 +1,7 @@
 #!/bin/env python2
 
 import sys, os
+import copy
 import libvirt
 import libxml2
 import subprocess, shlex
@@ -12,6 +13,27 @@ def _config_init(method):
             VirtuiConfig.loadconfig()
         return method(*args, **kwargs)
     return wrapped
+
+def _enable_helper(helper_name):
+    # FIXME: Create documentation for helpers
+    # Basic idea is, that user data is on stdout and data for virtui are passed
+    # via stderr.
+    def helper_decorator(funct):
+        def wrapped(*args, **kwargs):
+            helper = VirtuiConfig.helper(helper_name)
+            if helper == None:
+                return funct(*args, **kwargs)
+            env = copy.copy(os.environ)
+            # FIXME: add VIRTUI_ prefix to kwargs
+            env.update(kwargs)
+            # FIXME: Command may not be executed, check!
+            proc = subprocess.Popen([helper] + list(args), stderr=subprocess.PIPE, env=env)
+            stdout, stderr = proc.communicate()
+            if proc.returncode == 0:
+                return stderr
+            return None
+        return wrapped
+    return helper_decorator
 
 def _first_or_None(l):
     try:
@@ -47,6 +69,8 @@ class VirtuiConfig(object):
                 'domain_list_format' : '{name}\t{on} {ips}',
                 'domain_on_format' : '[ON] ',
                 'domain_off_format' : '[OFF]',
+            },
+            'helpers' : {
             },
             'template-simple' : {
                 'virt-type' : 'kvm',
@@ -128,8 +152,28 @@ class VirtuiConfig(object):
     @staticmethod
     @_config_init
     def general(option, overrides=None):
+        # FIXME: Need cleanup together with helper
         try:
             value = VirtuiConfig._options['general'][option]
+        except KeyError:
+            return None
+        try:
+            if isinstance(value, str):
+                replacements = dict()
+                replacements.update(VirtuiConfig._options['general'])
+                if overrides is not None:
+                    replacements.update(overrides)
+                value %= replacements
+        except KeyError:
+            pass
+        return value
+
+    @staticmethod
+    @_config_init
+    def helper(name, overrides=None):
+        # FIXME: Need cleanup together with general
+        try:
+            value = VirtuiConfig._options['helpers'][name]
         except KeyError:
             return None
         try:
@@ -375,6 +419,7 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
             print
             return None
 
+@_enable_helper('select_file')
 def select_file(header="Select file.", preset=None, prompt="path: "):
     """Print prompt asking user to select file.
     When user doesn't enter any file path, preset is returned.
