@@ -24,8 +24,8 @@ def _enable_helper(helper_name):
             if helper == None:
                 return funct(*args, **kwargs)
             env = copy.copy(os.environ)
-            # FIXME: add VIRTUI_ prefix to kwargs
-            env.update(kwargs)
+            for (key, value) in kwargs.iteritems():
+                env["VIRUTI_%s" % key] = value
             # FIXME: Command may not be executed, check!
             proc = subprocess.Popen([helper] + list(args), stderr=subprocess.PIPE, env=env)
             stdout, stderr = proc.communicate()
@@ -516,7 +516,7 @@ def manage_cdrom(domain):
         domain.change_cdrom(cdrom, None)
     else:
         image = select_file("Select image for %s cdrom %s" %
-                            (domain.name, cdrom))
+                            (domain.name, cdrom), domain.cdrom_image(cdrom))
         if image is None:
             return
         domain.change_cdrom(cdrom, image)
