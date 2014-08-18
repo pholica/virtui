@@ -235,7 +235,7 @@ class Domain(object):
         if self.isActive():
             return [
                 ('shutdown', self.shutdown),
-                ('stop', self.stop),
+                ('kill', self.stop),
                 ('reboot', self.reboot),
                 ('reset', self.reset),
             ]
