@@ -1,7 +1,8 @@
 #!/bin/bash
 
 VIRTUI_header= # don't care about header
-PRESET=${2:-${VIRTUI_preset:-`pwd`"/"}}
+GIVEN_PRESET=${2:-$VIRTUI_preset}
+PRESET=${GIVEN_PRESET:-`pwd`"/"}
 VIRTUI_prompt= # don't care about prompt
 
 SELECTED=""
@@ -14,4 +15,6 @@ while [ $RETCODE -eq 0 ] && ([ -z $SELECTED ] || ! [ -e $SELECTED ]); do
     RETCODE=$?
     SELECTED=`cat $TMPFILE`
 done
+
+SELECTED=${SELECTED:-$GIVEN_PRESET}
 echo -n $SELECTED > /dev/stderr
