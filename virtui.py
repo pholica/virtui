@@ -14,6 +14,11 @@ def _config_init(method):
         return method(*args, **kwargs)
     return wrapped
 
+def _none_to_empty(value):
+    if value is None:
+        return ''
+    return value
+
 def _enable_helper(helper_name):
     # FIXME: Create documentation for helpers
     # Basic idea is, that user data is on stdout and data for virtui are passed
@@ -25,7 +30,9 @@ def _enable_helper(helper_name):
                 return funct(*args, **kwargs)
             env = copy.copy(os.environ)
             for (key, value) in kwargs.iteritems():
-                env["VIRUTI_%s" % key] = value
+                env["VIRUTI_%s" % key] = _none_to_empty(value)
+            # Change all None arguments to empty strings
+            args = map(_none_to_empty, args)
             # FIXME: Command may not be executed, check!
             proc = subprocess.Popen([helper] + list(args), stderr=subprocess.PIPE, env=env)
             stdout, stderr = proc.communicate()
