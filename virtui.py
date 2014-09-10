@@ -418,7 +418,15 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
             elif len(input_data) == 1 and other_options is not None:
                 return [opt[0] for opt in other_options if opt[1] == input_data][0]
             else:
-                return [opt[1] for opt in options if opt[1] == input_data][0]
+                candidates = [opt[1] 
+                              for opt in options
+                              if opt[1].startswith(input_data)]
+                if len(candidates) > 1:
+                    print "Possible candidates: %s" % candidates
+                elif len(candidates) == 1:
+                    return candidates[0]
+                else:
+                    print "No option beginning with '%s' found" % input_data
 
         except (IndexError, ValueError):
             pass
