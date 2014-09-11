@@ -522,7 +522,6 @@ def manage_domain(domain):
         return 100
     actions += [list(action)+[_move_start_to_top(action)] for
                 action in domain.actions()]
-    print actions
     print """Domain: {name}
 Online: {online}
 Running: {active}
