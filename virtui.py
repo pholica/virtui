@@ -35,7 +35,7 @@ def _enable_helper(helper_name):
             args = map(_none_to_empty, args)
             # FIXME: Command may not be executed, check!
             proc = subprocess.Popen([helper] + list(args), stderr=subprocess.PIPE, env=env)
-            stdout, stderr = proc.communicate()
+            _, stderr = proc.communicate()
             if proc.returncode == 0:
                 return stderr
             return None
@@ -435,7 +435,7 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
             elif len(input_data) == 1 and other_options is not None:
                 return [opt[0] for opt in other_options if opt[1] == input_data][0]
             else:
-                candidates = [opt[1] 
+                candidates = [opt[1]
                               for opt in options
                               if opt[1].startswith(input_data)]
                 if len(candidates) > 1:
