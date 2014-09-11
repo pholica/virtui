@@ -381,12 +381,23 @@ def __generate_options(options):
     If options is iterable of strings, return list containing (item, item).
     In other cases, return options unmodified (expecting, that options was
     already in correct form).
+
+    If options was tuple, use third item (if available) as sorting key. Option
+    items without sorting key are put on the end of the list in original order
+    without any regard on other sorting keys. (May change in future, e.g.
+    negative values in sorting key may be used for putting items to the end of
+    list effectively putting items without sorting key into the middle of the
+    list.
     """
     if isinstance(options, dict):
         return options.viewitems()
     if isinstance(options[0], str):
         return [(option, option) for option in options]
-    return options
+    return sorted([option for option in options
+                   if len(option) == 3 and options[2] is not None],
+                  key=lambda x: x[2]) + \
+        [option for option in options
+         if len(option) == 2 or options[2] is None]
 
 def select_option(options, header="Select option:", prompt="#? ", other_options=None):
     """Print options and prompt asking user to select one.
