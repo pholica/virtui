@@ -503,19 +503,26 @@ def manage_domain(domain):
     info = domain_info(domain)
     if domain.isActive():
         actions += [
-            ('console', lambda: start_console(domain)),
-            ('viewer', lambda: start_viewer(domain)),
+            ('console', lambda: start_console(domain), 10),
+            ('viewer', lambda: start_viewer(domain), 15),
         ]
-        if domain.cdroms:
-            actions += [
-                ('change CD/DVD', lambda: manage_cdrom(domain)),
-            ]
-        if domain.isOnline():
-            actions += [
-                ('ssh', lambda: start_ssh(domain)),
-                ('vnc', lambda: start_vnc(domain)),
-            ]
-    actions += domain.actions()
+    if domain.cdroms:
+        actions += [
+            ('change CD/DVD', lambda: manage_cdrom(domain), 20),
+        ]
+    if domain.isOnline():
+        actions += [
+            ('ssh', lambda: start_ssh(domain), 30),
+            ('vnc', lambda: start_vnc(domain), 35),
+        ]
+    # UGLY HACK: put start on top of the actions list
+    def _move_start_to_top(action):
+        if action[0] == 'start':
+            return 0
+        return 100
+    actions += [list(action)+[_move_start_to_top(action)] for
+                action in domain.actions()]
+    print actions
     print """Domain: {name}
 Online: {online}
 Running: {active}
