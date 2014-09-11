@@ -414,6 +414,8 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
     """
     while True:
         num = 0
+
+        # Print selection
         print
         print header
         if other_options is not None:
@@ -424,6 +426,8 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
         for (_, option) in options:
             num += 1
             print "{0}) {1}".format(num, option)
+
+        # Process input
         try:
             input_data = raw_input(prompt)
             if input_data.isdigit():
@@ -633,7 +637,7 @@ def start_vnc(domain):
     _run_command(cmd, VirtuiConfig.general('vnc_terminal'), 'Vncviewer %s' % domain.name)
 
 def _null_file(mode='r'):
-    return file('/dev/null', mode)
+    return open('/dev/null', mode)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
