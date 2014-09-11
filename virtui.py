@@ -399,7 +399,7 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
 
     One can enter number => option of such index is selected.
     One can enter one character => other_option of such shortcut is selected.
-    One can enter full option => option itself is selected.
+    One can enter start of option => option itself is selected if there is only one option starting with it.
     """
     while True:
         num = 0
