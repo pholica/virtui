@@ -394,10 +394,10 @@ def __generate_options(options):
     if isinstance(options[0], str):
         return [(option, option) for option in options]
     return sorted([option for option in options
-                   if len(option) == 3 and options[2] is not None],
+                   if len(option) == 3 and option[2] is not None],
                   key=lambda x: x[2]) + \
         [option for option in options
-         if len(option) == 2 or options[2] is None]
+         if len(option) == 2 or option[2] is None]
 
 def select_option(options, header="Select option:", prompt="#? ", other_options=None):
     """Print options and prompt asking user to select one.
@@ -423,7 +423,7 @@ def select_option(options, header="Select option:", prompt="#? ", other_options=
                 print "{0}] {1}".format(key, description)
             print
         options = __generate_options(options)
-        for (_, option) in options:
+        for option in [opt[1] for opt in options]:
             num += 1
             print "{0}) {1}".format(num, option)
 
@@ -524,12 +524,12 @@ Nics and IPs:""".format(**info)
         if IP is None:
             IP = 'N/A'
         print "%s\t%s" % (mac, IP)
-    action = select_option([a[0] for a in actions],
+    action = select_option([(a[0], a[0], a[2]) for a in actions],
                            "%s actions:" % domain.name)
-    actions = dict(actions) # we don't care about order anymore
+    actions = dict([act[:2] for act in actions]) # we don't care about order anymore
     if action is None:
         return
-    elif actions[action] != None:
+    elif actions[action] is not None:
         actions[action]()
     else:
         print 'Unhandled action: %s' % action
