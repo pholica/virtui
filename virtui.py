@@ -233,6 +233,8 @@ class Domain(object):
         return bool(self._domain.isActive())
 
     def isOnline(self):
+        if not self.isActive():
+            return False
         for nic in self.nics:
             if nic[1] != None:
                 return True
