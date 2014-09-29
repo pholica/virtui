@@ -300,7 +300,10 @@ class Domain(object):
   <readonly />
 </disk>""" % (device, image)
         try:
-            self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
+            if self.isActive():
+                self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
+            else:
+                self._domain.updateDeviceFlags(xml)
             return True
         except libvirt.libvirtError:
             return False
