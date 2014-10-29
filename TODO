@@ -1,4 +1,0 @@
-Document helper scripts.
-Add support for creating new systems (using config and helper scripts).
-Send ARP request for NICs without registered IP address (e.g. for cases where guest didn't ask DHCP for IP)
-Create some nice readme with hints about policykit configuration.
