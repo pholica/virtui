@@ -16,13 +16,13 @@ Virtui can currently perform following actions with VMs:
 * launch ssh (if VM is on same host as virui)
 * vnc (if VM is on same host as virui)
 
-##ssh, vnc and network
+###ssh, vnc and network
 Since virtui has very limited knowledge (same as virt-manager and possibly other tools) about network and only knows MAC addresses of the VM. So virtui looks into ARP table if there is record of MAC address owned by VM and has correspondig IP address. In such case, virtui offers such IP address for the user and is able to launch ssh and vnc for such VM.
 
-##configuration
+###configuration
 
 
-##helper scripts
+###helper scripts
 
 
 ##Other notes
