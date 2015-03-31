@@ -305,7 +305,8 @@ class Domain(object):
             else:
                 self._domain.updateDeviceFlags(xml)
             return True
-        except libvirt.libvirtError:
+        except libvirt.libvirtError as e:
+            print "Couldn't change/eject CD. Libvirt error: %s" % e.get_error_message()
             return False
 
     def remove(self):
@@ -369,6 +370,7 @@ class Domain(object):
 
 def main(args):
     ended = False
+    libvirt.registerErrorHandler(lambda x, y: None, None)
     VirtuiConfig.loadconfig('~/.virtui.conf')
     _change_terminal_title(VirtuiConfig.general('virtui_terminal_title'))
     conn = Connection(VirtuiConfig.general('LIBVIRT_URI'))
