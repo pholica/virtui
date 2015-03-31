@@ -543,7 +543,10 @@ Nics and IPs:""".format(**info)
     if action is None:
         return
     elif actions[action] is not None:
-        actions[action]()
+        try:
+            actions[action]()
+        except libvirt.libvirtError as e:
+            print "Action '%s' failed. Libvirt error: %s" % (action, e.get_error_message())
     else:
         print 'Unhandled action: %s' % action
 
