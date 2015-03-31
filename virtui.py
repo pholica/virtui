@@ -392,6 +392,8 @@ def __generate_options(options):
     list effectively putting items without sorting key into the middle of the
     list.
     """
+    if len(options) == 0:
+        return []
     if isinstance(options, dict):
         return options.viewitems()
     if isinstance(options[0], str):
