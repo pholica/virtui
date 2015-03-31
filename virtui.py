@@ -25,8 +25,8 @@ def _enable_helper(helper_name):
     # via stderr.
     def helper_decorator(funct):
         def wrapped(*args, **kwargs):
-            helper = VirtuiConfig.helper(helper_name)
-            if helper == None:
+            helper = os.path.join(os.path.dirname(__file__), 'helpers', VirtuiConfig.helper(helper_name))
+            if not os.path.exists(helper):
                 return funct(*args, **kwargs)
             env = copy.copy(os.environ)
             for (key, value) in kwargs.iteritems():
