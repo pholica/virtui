@@ -55,20 +55,6 @@ def _change_terminal_title(title):
     sys.stdout.write("\033]0;%s\007" % title)
     sys.stdout.flush()
 
-def _config_init(method):
-    def wrapped(*args, **kwargs):
-        if VirtuiConfig._options == None:
-            VirtuiConfig.loadconfig()
-        return method(*args, **kwargs)
-    return wrapped
-
-def _new_groupid():
-    os.setpgid(os.getpid(), os.getpid())
-
-def _change_terminal_title(title):
-    sys.stdout.write("\033]0;%s\007" % title)
-    sys.stdout.flush()
-
 class VirtuiConfig(object):
     _options = None
 
@@ -168,7 +154,7 @@ class VirtuiConfig(object):
             VirtuiConfig._options_update(VirtuiConfig._configfile(configfile))
         if load_env:
             VirtuiConfig._options_update(VirtuiConfig._env())
-        VirtuiConfig._options_update(overrides)        
+        VirtuiConfig._options_update(overrides)
 
     @staticmethod
     @_config_init
