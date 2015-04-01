@@ -19,14 +19,24 @@ def _none_to_empty(value):
         return ''
     return value
 
+def _find_in_path(paths, filename):
+    if isinstance(paths, str):
+        paths = paths.split(":")
+    for path in paths:
+        try_path = os.path.join(path, filename)
+        if os.path.exists(try_path):
+            return try_path
+    return None
+
 def _enable_helper(helper_name):
     # FIXME: Create documentation for helpers
     # Basic idea is, that user data is on stdout and data for virtui are passed
     # via stderr.
     def helper_decorator(funct):
         def wrapped(*args, **kwargs):
-            helper = os.path.join(os.path.dirname(__file__), 'helpers', VirtuiConfig.helper(helper_name))
-            if not os.path.exists(helper):
+            helper = _find_in_path(VirtuiConfig.general('helpers_path'),
+                                   VirtuiConfig.helper(helper_name))
+            if helper is None:
                 return funct(*args, **kwargs)
             env = copy.copy(os.environ)
             for (key, value) in kwargs.iteritems():
@@ -76,6 +86,7 @@ class VirtuiConfig(object):
                 'domain_list_format' : '{name}\t{on} {ips}',
                 'domain_on_format' : '[ON] ',
                 'domain_off_format' : '[OFF]',
+                'helpers_path' : os.path.join(os.path.dirname(__file__), 'helpers'),
             },
             'helpers' : {
             },
