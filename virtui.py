@@ -632,9 +632,9 @@ def start_viewer(domain):
     _run_command(cmd, VirtuiConfig.general('viewer_terminal'), 'Viewer %s' % domain.name)
 
 def start_ssh(domain):
-    IPs = [IP[1] for IP in domain.nics]
+    IPs = [IP[1] for IP in domain.nics if IP[1] is not None]
     if len(IPs) == 0:
-        print "No network connection on host %s" % domain.name
+        print "No known network connection on host %s" % domain.name
         return
     if len(IPs) > 1:
         IP = select_option(IPs)
@@ -648,9 +648,9 @@ def start_ssh(domain):
     _run_command(cmd, VirtuiConfig.general('ssh_terminal'), 'SSH %s' % domain.name,)
 
 def start_vnc(domain):
-    IPs = [IP[1] for IP in domain.nics]
+    IPs = [IP[1] for IP in domain.nics if IP[1] is not None]
     if len(IPs) == 0:
-        print "No network connection on host %s" % domain.name
+        print "No known network connection on host %s" % domain.name
         return
     if len(IPs) > 1:
         IP = select_option(IPs)
