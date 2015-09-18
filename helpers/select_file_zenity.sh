@@ -9,7 +9,7 @@ SELECTED=""
 
 true
 while [ $? -eq 0 ] && ([ -z $SELECTED ] || ! [ -e $SELECTED ]); do
-    SELECTED=`zenity --file-selection --title $HEADER --filename $PRESET`
+    SELECTED=`zenity --file-selection --title $HEADER --filename $PRESET 2>/dev/null`
 done
 
 SELECTED=${SELECTED:-$GIVEN_PRESET}
