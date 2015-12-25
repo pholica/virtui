@@ -35,9 +35,9 @@ class Ticker(threading.Thread):
         while True:
             sleep(self.interval)
             self.events.put(Event("tick"))
-        
+
 class UI(object):
-    def __init__(self, events, stdscr, log = False):
+    def __init__(self, events, stdscr, log=False):
         super(UI, self).__init__()
         self.ended = False
         self.events = events
@@ -90,7 +90,6 @@ class UI(object):
             self.__handle_event(event)
 
     def loggingHandler(self, *args, **kwargs):
-        ui = self
         events = self.events
         class LoggingHandler(logging.Handler):
             def __init__(self, level=None):
@@ -104,7 +103,7 @@ class UI(object):
 
         return LoggingHandler(*args, **kwargs)
 
-    def resize(self, event = None):
+    def resize(self):
         height, width = self.stdscr.getmaxyx()
         self.stdscr.clear()
         if self.log:
@@ -149,7 +148,7 @@ class UI(object):
         self.__register_handler("key press", self.key_press)
         self.__register_handler("add", self.add)
         self.__register_handler("remove", self.remove)
-        
+
     def add(self, items):
         if not isinstance(items, collections.Iterable):
             items = [items]
@@ -198,7 +197,7 @@ class UI(object):
             return
         self.select(index=self.current-1)
 
-    def selection_changed(self, old = None):
+    def selection_changed(self, old=None):
         if old is None:
             logger.debug("Set selection to %d", self.current)
         else:
@@ -208,7 +207,7 @@ class UI(object):
 
     def quit(self):
         self.ended = True
-        
+
     def draw_item(self, index):
         window = self.windows["left"]
         _, width = window.getmaxyx()
@@ -233,7 +232,7 @@ class UI(object):
             char = self.stdscr.getch()
             if char == -1:
                 break
-            self.events.put(Event("key press", char))        
+            self.events.put(Event("key press", char))
 
     def mainloop(self):
         Ticker(0.1, self.events).start()
@@ -247,7 +246,7 @@ class UI(object):
             curses.doupdate()
             self.events.task_done()
         return 0
-            
+
 def main(stdscr):
     file_handler = logging.FileHandler("/tmp/watcher_debug", "w")
     file_handler.setLevel(logging.DEBUG)
