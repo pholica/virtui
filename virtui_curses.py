@@ -148,6 +148,7 @@ class UI(object):
         self.__register_handler("log message", self.show_message)
         self.__register_handler("key press", self.key_press)
         self.__register_handler("add", self.add)
+        self.__register_handler("remove", self.remove)
         
     def add(self, items):
         if not isinstance(items, collections.Iterable):
