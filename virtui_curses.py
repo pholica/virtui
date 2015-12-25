@@ -152,11 +152,13 @@ class UI(object):
     def add(self, items):
         if not isinstance(items, collections.Iterable):
             items = [items]
+        if len(items) == 0:
+            return
         self.items += items
         self.draw_items()
         if self.current is None:
             self.current = 0
-            self.events.put(Event("selection changed", None))
+            self.events.put(Event("selection changed"))
 
     def remove(self, items):
         old = None
@@ -195,7 +197,7 @@ class UI(object):
             return
         self.select(index=self.current-1)
 
-    def selection_changed(self, old):
+    def selection_changed(self, old = None):
         if old is None:
             logger.debug("Set selection to %d", self.current)
         else:
