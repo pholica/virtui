@@ -26,6 +26,7 @@ class UI(object):
         self.items = []
         self.current = None
         self.__handlers = {}
+        # Event thread needs to be initialized before connection is made
         self.__libvirt_event_thread = LibvirtEventThread(self.events)
         self.__connection = Connection()
 
