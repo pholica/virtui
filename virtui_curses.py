@@ -9,32 +9,12 @@ import logging
 
 from math import ceil
 
-from libs import connection
+from libs import connection, events
+from libs.connection import Connection
+from libs.events import Event, LibvirtEventThread
 
 logger = logging.getLogger("virtui_curses")
 logger.addHandler(logging.NullHandler())
-
-class Event(object):
-    def __init__(self, event_type, *args, **kwargs):
-        if event_type != "tick":
-            logger.debug("Event created: '%s' with args: '%s' and kwargs: '%s'",
-                         event_type, repr(args), repr(kwargs))
-        self.event_type = event_type
-        self.args = args
-        self.kwargs = kwargs
-
-class Ticker(threading.Thread):
-    def __init__(self, interval, events):
-        super(Ticker, self).__init__()
-        self.interval = interval
-        self.events = events
-        self.daemon = True
-
-    def run(self):
-        from time import sleep
-        while True:
-            sleep(self.interval)
-            self.events.put(Event("tick"))
 
 class UI(object):
     def __init__(self, events, stdscr, log=False):
@@ -46,7 +26,8 @@ class UI(object):
         self.items = []
         self.current = None
         self.__handlers = {}
-        self.__connection = connection.Connection()
+        self.__libvirt_event_thread = LibvirtEventThread(self.events)
+        self.__connection = Connection()
 
         curses.curs_set(0)
         curses.use_default_colors()
@@ -235,6 +216,22 @@ class UI(object):
             self.events.put(Event("key press", char))
 
     def mainloop(self):
+        class Ticker(threading.Thread):
+            def __init__(self, interval, events):
+                super(Ticker, self).__init__()
+                self.interval = interval
+                self.events = events
+                self.daemon = True
+
+            def run(self):
+                from time import sleep
+                while True:
+                    sleep(self.interval)
+                    self.events.put(Event("tick"))
+
+        self.__libvirt_event_thread.register_for_connection(self.__connection)
+        self.__libvirt_event_thread.daemon = True
+        self.__libvirt_event_thread.start()
         Ticker(0.1, self.events).start()
         while not self.ended:
             self.__readkeys()
@@ -245,10 +242,11 @@ class UI(object):
             self.__handle_event(event)
             curses.doupdate()
             self.events.task_done()
+        self.__libvirt_event_thread.stop()
         return 0
 
 def main(stdscr):
-    file_handler = logging.FileHandler("/tmp/watcher_debug", "w")
+    file_handler = logging.FileHandler("/tmp/virtui_curses_debug", "w")
     file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
     logger.setLevel(logging.DEBUG)
