@@ -22,12 +22,12 @@ class Domain(object):
         return self.name
 
     def __eq__(self, other):
-        return not self.__ne__(other)
+        if type(self) != type(other):
+            return False
+        return self._domain.UUID() == other._domain.UUID()
 
     def __ne__(self, other):
-        if type(self) != type(other):
-            return True
-        return self._name != other._name
+        return not self.__eq__(other)
 
     def isActive(self):
         return bool(self._domain.isActive())
