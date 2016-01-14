@@ -10,7 +10,6 @@ import logging
 
 from math import ceil
 
-from libs import connection, events
 from libs.connection import Connection
 from libs.events import Event, LibvirtEventThread
 from libs.functions import run_command
@@ -258,7 +257,7 @@ class UI(object):
         window.addstr(index+1, 1,
                       format_string % (index+1, str(domain)),
                       attrs + curses.color_pair(curses.COLOR_CYAN))
-        draw_domain_status(domain, attrs,  curses.color_pair(curses.COLOR_CYAN))
+        draw_domain_status(domain, attrs, curses.color_pair(curses.COLOR_CYAN))
         window.noutrefresh()
 
     def draw_items(self):
