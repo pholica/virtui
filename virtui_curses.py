@@ -47,7 +47,8 @@ class UI(object):
         if self.log:
             logger.addHandler(self.loggingHandler(logging.WARN))
         self.events.put(Event("window resized"))
-        self.events.put(Event("add", self.__connection.domains(True)))
+        self.events.put(Event("add", sorted(self.__connection.domains(True),
+                                            key=str)))
 
     def __register_handler(self, event_type, func):
         self.__handlers[event_type] = func
@@ -106,6 +107,14 @@ class UI(object):
             return Event("select previous")
         if keycode == curses.KEY_DOWN:
             return Event("select next")
+        if keycode == ord('u'):
+            return Event("power on")
+        if keycode == ord('d'):
+            return Event("power off")
+        if keycode == ord('c'):
+            return Event("open console")
+        if keycode == ord('v'):
+            return Event("open viewer")
         if keycode >= ord('0') and keycode <= ord('9'):
             return Event("select", keycode - ord('0') - 1)
         try:
@@ -130,6 +139,11 @@ class UI(object):
         self.__register_handler("key press", self.key_press)
         self.__register_handler("add", self.add)
         self.__register_handler("remove", self.remove)
+        self.__register_handler("power on", self.power_on)
+        self.__register_handler("power off", self.power_off)
+        self.__register_handler("open console", lambda x: None)
+        self.__register_handler("open viewer", lambda x: None)
+        self.__register_handler("update domain", self.update_domain_status)
 
     def add(self, items):
         if not isinstance(items, collections.Iterable):
@@ -190,16 +204,41 @@ class UI(object):
     def quit(self):
         self.ended = True
 
+    def update_domain_status(self, domain):
+        index = self.items.index(domain)
+        self.draw_item(index)
+
+    def power_on(self):
+        if self.current is None:
+            return
+        self.items[self.current].start()
+
+    def power_off(self):
+        if self.current is None:
+            return
+        self.items[self.current].stop()
+
     def draw_item(self, index):
         window = self.windows["left"]
         _, width = window.getmaxyx()
+        def draw_domain_status(domain, base_attrs, color_attrs):
+            window.addch(index+1, width-3, ord(" "), base_attrs + color_attrs)
+            if domain.isActive():
+                char = ord('U')
+                color_attrs = curses.color_pair(curses.COLOR_GREEN)
+            else:
+                char = ord('D')
+                color_attrs = curses.color_pair(curses.COLOR_RED)
+            window.addch(index+1, width-2, char, base_attrs + color_attrs)
         format_string = "%%-2s %%-%ds" % (width - 5)
         attrs = curses.A_NORMAL
         if index == self.current:
             attrs = curses.A_REVERSE
+        domain = self.items[index]
         window.addstr(index+1, 1,
-                      format_string % (index+1, str(self.items[index])),
+                      format_string % (index+1, str(domain)),
                       attrs + curses.color_pair(curses.COLOR_CYAN))
+        draw_domain_status(domain, attrs,  curses.color_pair(curses.COLOR_CYAN))
         window.noutrefresh()
 
     def draw_items(self):

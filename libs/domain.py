@@ -21,6 +21,14 @@ class Domain(object):
     def __str__(self):
         return self.name
 
+    def __eq__(self, other):
+        return not self.__ne__(other)
+
+    def __ne__(self, other):
+        if type(self) != type(other):
+            return False
+        return self._domain == other._domain
+
     def isActive(self):
         return bool(self._domain.isActive())
 

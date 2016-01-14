@@ -1,6 +1,7 @@
 #!/bin/env python2
 
 from . import logger
+from .domain import Domain
 import threading
 import libvirt
 
@@ -16,7 +17,7 @@ class Event(object):
 class LibvirtEventThread(threading.Thread):
     def __init__(self, events):
         super(LibvirtEventThread, self).__init__()
-        self.event = events
+        self.events = events
         self.daemon = True
         self.ended = False
         libvirt.virEventRegisterDefaultImpl()
@@ -40,5 +41,6 @@ class LibvirtEventThread(threading.Thread):
         logger.error("Libvirt connection closed!")
         
     def handle_event(self, conn, dom, event, detail, opaque):
+        self.events.put(Event("update domain", Domain(dom)))
         logger.debug("Libvirt event: '%s' for domain: '%s' detail: %s",
                      event, dom, detail)
