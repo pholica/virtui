@@ -1,5 +1,9 @@
 #!/bin/env python2
 
+import os
+
+from ConfigParser import RawConfigParser
+
 def _config_init(method):
     def wrapped(*args, **kwargs):
         if VirtuiConfig._options == None:
