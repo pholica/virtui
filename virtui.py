@@ -1,670 +1,306 @@
 #!/bin/env python2
 
-import sys, os
-import copy
-import libvirt
-import libxml2
-import subprocess, shlex
-from ConfigParser import RawConfigParser
+import Queue
+import threading
+import collections
+import curses
+import shlex
 
-def _config_init(method):
-    def wrapped(*args, **kwargs):
-        if VirtuiConfig._options == None:
-            VirtuiConfig.loadconfig()
-        return method(*args, **kwargs)
-    return wrapped
+import logging
 
-def _none_to_empty(value):
-    if value is None:
-        return ''
-    return value
+from math import ceil
 
-def _find_in_path(paths, filename):
-    if isinstance(paths, str):
-        paths = paths.split(":")
-    for path in paths:
-        try_path = os.path.join(path, filename)
-        if os.path.exists(try_path):
-            return try_path
-    return None
+from libs.connection import Connection
+from libs.events import Event, LibvirtEventThread
+from libs.functions import run_command
+from libs.config import VirtuiConfig
 
-def _enable_helper(helper_name):
-    # FIXME: Create documentation for helpers
-    # Basic idea is, that user data is on stdout and data for virtui are passed
-    # via stderr.
-    def helper_decorator(funct):
-        def wrapped(*args, **kwargs):
-            helper = _find_in_path(VirtuiConfig.general('helpers_path'),
-                                   VirtuiConfig.helper(helper_name))
-            if helper is None:
-                return funct(*args, **kwargs)
-            env = copy.copy(os.environ)
-            for (key, value) in kwargs.iteritems():
-                env["VIRUTI_%s" % key] = _none_to_empty(value)
-            # Change all None arguments to empty strings
-            args = map(_none_to_empty, args)
-            # FIXME: Command may not be executed, check!
-            proc = subprocess.Popen([helper] + list(args), stderr=subprocess.PIPE, env=env)
-            _, stderr = proc.communicate()
-            if proc.returncode == 0:
-                return stderr
-            return None
-        return wrapped
-    return helper_decorator
+logger = logging.getLogger("virtui_curses")
+logger.addHandler(logging.NullHandler())
 
-def _first_or_None(l):
-    try:
-        return l[0]
-    except IndexError:
-        return None
+class UI(object):
+    def __init__(self, events, stdscr, log=False):
+        super(UI, self).__init__()
+        self.ended = False
+        self.events = events
+        self.stdscr = stdscr
+        self.log = log
+        self.items = []
+        self.current = None
+        self.__handlers = {}
+        VirtuiConfig.loadconfig('~/.virtui.conf')
+        # Event thread needs to be initialized before connection is made
+        self.__libvirt_event_thread = LibvirtEventThread(self.events)
+        self.__connection = Connection(VirtuiConfig.general('LIBVIRT_URI'))
 
-def _new_groupid():
-    os.setpgid(os.getpid(), os.getpid())
-
-def _change_terminal_title(title):
-    sys.stdout.write("\033]0;%s\007" % title)
-    sys.stdout.flush()
-
-class VirtuiConfig(object):
-    _options = None
-
-    @staticmethod
-    def _default():
-        return {
-            'general' : {
-                'virtui_terminal_title' : 'virtui',
-                'LIBVIRT_URI' : "qemu:///system",
-                'viewer' : 'virt-viewer --connect %(LIBVIRT_URI)s %(domain_name)s',
-                'viewer_terminal' : False,
-                'vnc' : 'vncviewer %(hostname)s:%(port)d',
-                'vnc_terminal' : False,
-                'ssh' : 'ssh %(user)s@%(hostname)s',
-                'ssh_terminal' : True,
-                'console' : 'virsh --connect %(LIBVIRT_URI)s console %(domain_name)s',
-                'console_terminal' : True,
-                'terminal_command' : 'xterm -T %(title)s -e %(command_list)s',
-                'domain_list_format' : '{name}\t{on} {ips}',
-                'domain_on_format' : '[ON] ',
-                'domain_off_format' : '[OFF]',
-                'helpers_path' : os.path.join(os.path.dirname(__file__), 'helpers'),
-            },
-            'helpers' : {
-            },
-            'template-simple' : {
-                'virt-type' : 'kvm',
-                'arch' : None,
-                'machine' : None,
-                'vcpus' : '1',
-                'cpu' : 'host',
-                'name' : 'template-test',
-                'memory' : '2G',
-                'display0_type' : 'spice', # none, spice, vnc
-                'display0_listen' : None, # vnc
-                'display0_port' : None, # spice, vnc
-                'display0_password' : None, # vnc
-                'serial0' : 'pty', # pty, dev, file, pipe, tcp, udp, unix
-                'serial0_path' : None, # dev, file, pipe, unix
-                'serial0_host' : None, # tcp, udp
-                'serial0_port' : None, # tcp, udp
-                'serial0_mode' : None, # tcp, unix
-                'serial0_protocol' : None, # tcp
-                'serial0_bind_host' : None, # udp
-                'serial0_bind_port' : None, # udp
-                'channel' : None, # TODO
-                # redirdev, tpm, rng, panic
-                'disk0_size' : '10G',
-                'disk0_name' : 'template-test.img',
-                'disk0_format' : 'qcow2',
-                'disk0_driver' : 'virtio',
-                'disk0_serial' : None,
-                'disk0_readonly' : 'False',
-                'cdrom0' : 'empty',
-                'nic0_model' : 'virtio',
-                'nic0_network' : 'default',
-                'nic0_mac' : None,
-                'install' : 'url', # url, pxe, cdrom, none
-                'install_url' : 'http://download.fedoraproject.org/pub/fedora/linux/releases/20/Fedora/x86_64/os/',
-                'install_commandline' : None, # url
-                'initrd_inject' : None, # url: puts file from path to obtained initrd
-                'os-variant' : 'none',
-                'boot' : 'cdrom,network,hd,menu=on,useserial=on',
-                'reboot' : 'False',
-                'wait' : None,
-                'helper' : None,
-            }
+        curses.curs_set(0)
+        curses.use_default_colors()
+        for i in range(0, curses.COLORS):
+            curses.init_pair(i, i, -1)
+        self.stdscr.clear()
+        self.stdscr.nodelay(1)
+        self.windows = {
+            "left" : stdscr.subwin(1, 1, 0, 0),
+            "right" : stdscr.subwin(1, 1, 0, 0),
         }
+        if self.log:
+            self.windows["bottom"] = stdscr.subwin(1, 1, 0, 0)
 
+        self.add_handlers()
+        if self.log:
+            logger.addHandler(self.loggingHandler(logging.WARN))
+        self.events.put(Event("window resized"))
+        self.events.put(Event("add", sorted(self.__connection.domains(True),
+                                            key=str)))
 
-    @staticmethod
-    def _configfile(configfile):
-        parser = RawConfigParser()
-        parser.read(os.path.expanduser(configfile))
-        # make two dimentional dict from config file
-        return dict([(section, dict(parser.items(section))) for section in parser.sections()])
+    def __register_handler(self, event_type, func):
+        self.__handlers[event_type] = func
 
-    @staticmethod
-    def _env():
-        overrides = {}
-        for key in VirtuiConfig._options['general'].keys():
-            if key.upper() in os.environ:
-                overrides[key] = os.environ[key.upper()]
-        return {'general' : overrides}
-
-    @staticmethod
-    def _options_update(updates):
-        for (key, section) in updates.iteritems():
-            for (name, value) in section.iteritems():
-                VirtuiConfig._options[key][name] = value
-
-    @staticmethod
-    def loadconfig(configfile=None, overrides=None, load_env=False):
-        if overrides is None:
-            overrides = {}
-        VirtuiConfig._options = VirtuiConfig._default()
-        if configfile is not None:
-            VirtuiConfig._options_update(VirtuiConfig._configfile(configfile))
-        if load_env:
-            VirtuiConfig._options_update(VirtuiConfig._env())
-        VirtuiConfig._options_update(overrides)
-
-    @staticmethod
-    @_config_init
-    def general(option, overrides=None):
-        # FIXME: Need cleanup together with helper
+    def __handle_event(self, event):
+        events = None
         try:
-            value = VirtuiConfig._options['general'][option]
+            handler = self.__handlers[event.event_type]
         except KeyError:
-            return None
-        try:
-            if isinstance(value, str):
-                replacements = dict()
-                replacements.update(VirtuiConfig._options['general'])
-                if overrides is not None:
-                    replacements.update(overrides)
-                value %= replacements
-        except KeyError:
-            pass
-        return value
-
-    @staticmethod
-    @_config_init
-    def helper(name, overrides=None):
-        # FIXME: Need cleanup together with general
-        try:
-            value = VirtuiConfig._options['helpers'][name]
-        except KeyError:
-            return None
-        try:
-            if isinstance(value, str):
-                replacements = dict()
-                replacements.update(VirtuiConfig._options['general'])
-                if overrides is not None:
-                    replacements.update(overrides)
-                value %= replacements
-        except KeyError:
-            pass
-        return value
-
-    @staticmethod
-    @_config_init
-    def templates():
-        for key in VirtuiConfig._options.keys():
-            if key.startswith('template-'):
-                yield key.replace('template-', '', 1)
-
-    @staticmethod
-    @_config_init
-    def template(name):
-        return VirtuiConfig._options['template-%s' % name]
-
-class Connection(object):
-    _conn = None
-
-    def __init__(self, URI="qemu:///system"):
-        super(Connection, self).__init__()
-        self._conn = libvirt.open(URI)
-
-    def domains(self, inactive=False):
-        domains = [Domain(dom) for dom in self._conn.listAllDomains()]
-        if not inactive:
-            domains = [dom for dom in  domains if dom.isActive()]
-        return domains
-
-
-class Domain(object):
-    _domain = None
-    _name = None
-
-    def __init__(self, domain):
-        super(Domain, self).__init__()
-        self._domain = domain
-        self._name = domain.name()
-
-    def isActive(self):
-        return bool(self._domain.isActive())
-
-    def isOnline(self):
-        if not self.isActive():
-            return False
-        for nic in self.nics:
-            if nic[1] != None:
-                return True
-        return False
-
-    def actions(self):
-        if self.isActive():
-            return [
-                ('shutdown', self.shutdown),
-                ('kill', self.stop),
-                ('reboot', self.reboot),
-                ('reset', self.reset),
-            ]
-        else:
-            return [
-                ('start', self.start),
-            ]
-
-    # power button or wakeup
-    def start(self):
-        self._domain.create()
-
-    # force stop
-    def stop(self):
-        self._domain.destroy()
-
-    # ACPI reset signal
-    def reboot(self):
-        self._domain.reboot()
-
-    # reset button
-    def reset(self):
-        self._domain.reset()
-
-    # suspend - memory remains on host
-    def suspend(self):
-        self._domain.suspend()
-
-    # wakeup
-    def resume(self):
-        self._domain.resume()
-
-    # power button
-    def shutdown(self):
-        self._domain.shutdown()
-
-    def cdrom_image(self, device):
-        medias = "//devices/disk[target/@dev='%s']/source/@dev" % device
-        return _first_or_None(self._query_xml(medias))
-
-    def change_cdrom(self, device, image):
-        if image is None:
-            xml = """<disk type='block' device='cdrom'>
-  <driver name='qemu' type='raw' />
-  <target dev='%s' bus='ide' />
-  <readonly />
-</disk>""" % device
-        else:
-            xml = """<disk type='block' device='cdrom'>
-  <driver name='qemu' type='raw' />
-  <target dev='%s' bus='ide' />
-  <source dev='%s' />
-  <readonly />
-</disk>""" % (device, image)
-        try:
-            if self.isActive():
-                self._domain.updateDeviceFlags(xml, libvirt.VIR_DOMAIN_DEVICE_MODIFY_LIVE)
-            else:
-                self._domain.updateDeviceFlags(xml)
-            return True
-        except libvirt.libvirtError as e:
-            print "Couldn't change/eject CD. Libvirt error: %s" % e.get_error_message()
-            return False
-
-    def remove(self):
-        self._domain.undefine()
-        self._domain = None
-        self._name = None
-
-    def short_status(self):
-        """Function that returns status string that is appended in menu."""
-        # variables containing status strings
-        power = VirtuiConfig.general('domain_on_format') \
-                if self.isActive() else VirtuiConfig.general('domain_off_format')
-        iplist = ','.join([nic[1] for nic in self.nics if nic[1] != None])
-
-        sts = VirtuiConfig.general('domain_list_format').format(name=self.name,
-                                                                on=power,
-                                                                ips=iplist)
-        return sts
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def macs(self):
-        return self._query_xml("//devices/interface[@type='network']/mac/@address")
-
-    @property
-    def nics(self):
-        retval = []
-        arpcache = open('/proc/net/arp', 'r')
-        for mac in self.macs:
-            arpcache.seek(0)
-            IP = None
-            for line in arpcache:
-                # 0x0 here means outdated entry, so don't use it
-                if line.split()[3] == mac and line.split()[2] != "0x0":
-                    IP = line.split()[0]
-                    break
-            retval.append((mac, IP))
-        arpcache.close()
-        return retval
-
-    @property
-    def cdroms(self):
-        devices = "//devices/disk[@device='cdrom']/target/@dev"
-        return [
-            (dev, self.cdrom_image(dev))
-            for dev in self._query_xml(devices)
-        ]
-
-    @property
-    def xml(self):
-        return self._domain.XMLDesc()
-
-    def _query_xml(self, xpath):
-        ctxt = libxml2.parseDoc(self.xml).xpathNewContext()
-        return [x.content for x in ctxt.xpathEval(xpath)]
-
-################################################################################
-
-def main(args):
-    ended = False
-    libvirt.registerErrorHandler(lambda x, y: None, None)
-    VirtuiConfig.loadconfig('~/.virtui.conf')
-    _change_terminal_title(VirtuiConfig.general('virtui_terminal_title'))
-    conn = Connection(VirtuiConfig.general('LIBVIRT_URI'))
-    while not ended:
-        domain = select_domain(conn)
-        if domain == None:
-            ended = True
-            break
-        manage_domain(domain)
-
-def __generate_options(options):
-    """If options is dict object, transform to list of (key, value).
-    If options is iterable of strings, return list containing (item, item).
-    In other cases, return options unmodified (expecting, that options was
-    already in correct form).
-
-    If options was tuple, use third item (if available) as sorting key. Option
-    items without sorting key are put on the end of the list in original order
-    without any regard on other sorting keys. (May change in future, e.g.
-    negative values in sorting key may be used for putting items to the end of
-    list effectively putting items without sorting key into the middle of the
-    list.
-    """
-    if len(options) == 0:
-        return []
-    if isinstance(options, dict):
-        return options.viewitems()
-    if isinstance(options[0], str):
-        return [(option, option) for option in options]
-    return sorted([option for option in options
-                   if len(option) == 3 and option[2] is not None],
-                  key=lambda x: x[2]) + \
-        [option for option in options
-         if len(option) == 2 or option[2] is None]
-
-def select_option(options, header="Select option:", prompt="#? ", other_options=None):
-    """Print options and prompt asking user to select one.
-    options can be either list of strings or list of tuples.
-    When options is list of strings, value of option is returned.
-    When options is list of tuples, first item returned.
-    When options is dict, key is returned.
-    Can also specify other_options as tuples where first item is returned,
-    and second item needs to be one-character long and can be selected by user.
-
-    One can enter number => option of such index is selected.
-    One can enter one character => other_option of such shortcut is selected.
-    One can enter start of option => option itself is selected if there is only one option starting with it.
-    """
-    while True:
-        num = 0
-
-        # Print selection
-        print
-        print header
-        if other_options is not None:
-            for (description, key) in other_options:
-                print "{0}] {1}".format(key, description)
-            print
-        options = __generate_options(options)
-        for option in [opt[1] for opt in options]:
-            num += 1
-            print "{0}) {1}".format(num, option)
-
-        # Process input
-        try:
-            input_data = raw_input(prompt)
-            if input_data.isdigit():
-                return options[int(input_data)-1][0]
-            elif len(input_data) == 1 and other_options is not None:
-                return [opt[0] for opt in other_options if opt[1] == input_data][0]
-            else:
-                candidates = [opt[1]
-                              for opt in options
-                              if opt[1].startswith(input_data)]
-                if len(candidates) > 1:
-                    print "Possible candidates: %s" % candidates
-                elif len(candidates) == 1:
-                    return candidates[0]
-                else:
-                    print "No option beginning with '%s' found" % input_data
-
-        except (IndexError, ValueError):
-            pass
-        except (EOFError, KeyboardInterrupt):
-            print
-            return None
-
-@_enable_helper('select_file')
-def select_file(header="Select file.", preset=None, prompt="path: "):
-    """Print prompt asking user to select file.
-    When user doesn't enter any file path, preset is returned.
-    Keep asking until path of existing file is entered or EOF or SIGINT is
-    received.
-    """
-    while True:
-        print
-        print header
-        try:
-            filepath = raw_input(prompt)
-        except (EOFError, KeyboardInterrupt):
-            print
-            return None
-        if filepath == "":
-            return preset
-        if os.path.exists(filepath):
-            return filepath
-        print "File not found!"
-
-def select_domain(conn):
-    domains = conn.domains(inactive=True)
-    menuitems = sorted([(dom.name, dom.short_status()) for dom in domains])
-    selected = select_option(
-        menuitems,
-        "Select domain:",
-        other_options=(('reload', 'r'),),
-    )
-    if selected == None:
-        return None
-    if selected == 'reload':
-        return select_domain(conn)
-    return [dom for dom in domains if dom.name == selected][0]
-
-def select_cdrom(domain):
-    if len(domain.cdroms) == 0:
-        return None
-    if len(domain.cdroms) == 1:
-        return domain.cdroms[0][0]
-    else:
-        options = [
-            (dev, '%s (%s)' % (dev, path))
-            for dev, path in domain.cdroms
-        ]
-        return select_option(options, "Select cdrom:")
-
-def manage_domain(domain):
-    actions = []
-    info = domain_info(domain)
-    if domain.isActive():
-        actions += [
-            ('console', lambda: start_console(domain), 10),
-            ('viewer', lambda: start_viewer(domain), 15),
-        ]
-    if domain.cdroms:
-        actions += [
-            ('change CD/DVD', lambda: manage_cdrom(domain), 20),
-        ]
-    if domain.isOnline():
-        actions += [
-            ('ssh', lambda: start_ssh(domain), 30),
-            ('vnc', lambda: start_vnc(domain), 35),
-        ]
-    # UGLY HACK: put start on top of the actions list
-    def _move_start_to_top(action):
-        if action[0] == 'start':
-            return 0
-        return 100
-    actions += [list(action)+[_move_start_to_top(action)] for
-                action in domain.actions()]
-    print """Domain: {name}
-Online: {online}
-Running: {active}
-Nics and IPs:""".format(**info)
-    for (mac, IP) in domain.nics:
-        if IP is None:
-            IP = 'N/A'
-        print "%s\t%s" % (mac, IP)
-    action = select_option([(a[0], a[0], a[2]) for a in actions],
-                           "%s actions:" % domain.name)
-    actions = dict([act[:2] for act in actions]) # we don't care about order anymore
-    if action is None:
-        return
-    elif actions[action] is not None:
-        try:
-            actions[action]()
-        except libvirt.libvirtError as e:
-            print "Action '%s' failed. Libvirt error: %s" % (action, e.get_error_message())
-    else:
-        print 'Unhandled action: %s' % action
-
-def manage_cdrom(domain):
-    cdrom = select_cdrom(domain)
-    header = '%s cdrom %s (%s) action:' % (
-        domain.name,
-        cdrom,
-        domain.cdrom_image(cdrom)
-    )
-    action = select_option(['eject', 'change'], header)
-    if action == None:
-        return
-    elif action == 'eject':
-        domain.change_cdrom(cdrom, None)
-    else:
-        image = select_file("Select image for %s cdrom %s" %
-                            (domain.name, cdrom), domain.cdrom_image(cdrom))
-        if image is None:
+            if event.event_type != "tick":
+                logger.warn("Unhandled event: '%s', ignoring", event.event_type)
             return
-        domain.change_cdrom(cdrom, image)
-
-def domain_info(domain):
-    return {
-        "name" : domain.name,
-        "active" : domain.isActive(),
-        "online" : domain.isOnline(),
-        "macs" : domain.macs,
-        }
-
-def __join_command(command):
-    return " ".join(
-        [
-        "'%s'" % x.replace("\\", "\\\\").replace("'", "\\'") for x in command
-        ]
-    )
-
-def _run_command(command, terminal=False, terminal_title=''):
-    if terminal:
-        terminal_command = shlex.split(VirtuiConfig.general('terminal_command'))
         try:
-            index = terminal_command.index('%(command_list)s')
-            terminal_command[index:index+1] = command
-            command = terminal_command
+            events = handler(*event.args, **event.kwargs)
+        except TypeError as e:
+            logger.error("Wrong event '%s' for handler: %s", event.event_type, e)
+        if events is None:
+            return
+        if not isinstance(events, collections.Iterable):
+            events = [events]
+        for event in events:
+            self.__handle_event(event)
+
+    def loggingHandler(self, *args, **kwargs):
+        events = self.events
+        class LoggingHandler(logging.Handler):
+            def __init__(self, level=None):
+                if level is None:
+                    super(LoggingHandler, self).__init__()
+                else:
+                    super(LoggingHandler, self).__init__(level)
+
+            def emit(self, record):
+                events.put(Event("log message", self.format(record)))
+
+        return LoggingHandler(*args, **kwargs)
+
+    def resize(self):
+        height, width = self.stdscr.getmaxyx()
+        self.stdscr.clear()
+        if self.log:
+            height -= 1
+            self.windows["bottom"].resize(1, width)
+            self.windows["bottom"].mvwin(height, 0)
+        self.windows["left"].resize(height, width/2)
+        self.windows["right"].resize(height, int(ceil(width/2.0)))
+        self.windows["right"].mvwin(0, width/2)
+        self.draw_items()
+
+    def key_press(self, keycode):
+        event_name = VirtuiConfig.key_bindings(keycode)
+        if event_name is not None:
+            return Event(event_name)
+        if keycode >= ord('0') and keycode <= ord('9'):
+            return Event("select", keycode - ord('0') - 1)
+        try:
+            logger.debug("Unhandled key press: '%d': '%s'", keycode, chr(keycode))
         except ValueError:
-            pass
-        final_substitutions = {
-            'command' : __join_command(command),
-            'title' : terminal_title,
-        }
-        try:
-            command = [arg % final_substitutions for arg in command]
-        except KeyError:
-            print >>sys.stderr, "Failed to substitute some portions of command: %s" % str(command)
+            logger.debug("Unhandled key press: '%d'", keycode)
 
-    subprocess.Popen(command,
-                     stdin=_null_file(),
-                     stdout=_null_file('w'),
-                     stderr=_null_file('w'),
-                     preexec_fn=_new_groupid,
-    )
+    def show_message(self, message):
+        window = self.windows["bottom"]
+        window.clear()
+        window.addnstr(0, 0, "LOG: " + message, window.getmaxyx()[1]-1)
+        window.refresh()
 
+    def add_handlers(self):
+        self.__register_handler("quit", self.quit)
+        self.__register_handler("select", self.select)
+        self.__register_handler("select next", self.select_next)
+        self.__register_handler("select previous", self.select_previous)
+        self.__register_handler("selection changed", self.selection_changed)
+        self.__register_handler("window resized", self.resize)
+        self.__register_handler("log message", self.show_message)
+        self.__register_handler("key press", self.key_press)
+        self.__register_handler("add", self.add)
+        self.__register_handler("remove", self.remove)
+        self.__register_handler("power on", self.power_on)
+        self.__register_handler("power off", self.power_off)
+        self.__register_handler("open console", self.open_console)
+        self.__register_handler("open viewer", self.open_viewer)
+        self.__register_handler("update domain", self.update_domain_status)
 
-def start_console(domain):
-    replacement = {'domain_name' : domain.name}
-    cmd = shlex.split(VirtuiConfig.general('console', replacement))
-    _run_command(cmd, VirtuiConfig.general('console_terminal'), 'Console %s' % domain.name)
+    def add(self, items):
+        if not isinstance(items, collections.Iterable):
+            items = [items]
+        if len(items) == 0:
+            return
+        self.items += items
+        self.draw_items()
+        if self.current is None:
+            self.current = 0
+            self.events.put(Event("selection changed"))
 
-def start_viewer(domain):
-    replacement = {'domain_name' : domain.name}
-    cmd = shlex.split(VirtuiConfig.general('viewer', replacement))
-    _run_command(cmd, VirtuiConfig.general('viewer_terminal'), 'Viewer %s' % domain.name)
+    def remove(self, items):
+        old = None
+        if not isinstance(items, collections.Iterable):
+            items = [items]
+        for item in items:
+            if self.current == self.items.index(item):
+                if len(self.items) == 1:
+                    if old is None:
+                        old = self.current
+                    self.current = None
+                elif self.current == len(self.items) - 1:
+                    if old is None:
+                        old = self.current
+                    self.current -= 1
+            self.items.remove(item)
+        if old is not None:
+            self.events.put(Event("selection changed", old))
 
-def start_ssh(domain):
-    IPs = [IP[1] for IP in domain.nics if IP[1] is not None]
-    if len(IPs) == 0:
-        print "No known network connection on host %s" % domain.name
-        return
-    if len(IPs) > 1:
-        IP = select_option(IPs)
-    else:
-        IP = IPs[0]
-    replacement = {
-        'user' : 'root',
-        'hostname' : IP,
-    }
-    cmd = shlex.split(VirtuiConfig.general('ssh', replacement))
-    _run_command(cmd, VirtuiConfig.general('ssh_terminal'), 'SSH %s' % domain.name,)
+    def select(self, index):
+        if index < 0 or index >= len(self.items):
+            return
+        if index == self.current:
+            return
+        old = self.current
+        self.current = index
+        self.events.put(Event("selection changed", old))
 
-def start_vnc(domain):
-    IPs = [IP[1] for IP in domain.nics if IP[1] is not None]
-    if len(IPs) == 0:
-        print "No known network connection on host %s" % domain.name
-        return
-    if len(IPs) > 1:
-        IP = select_option(IPs)
-    else:
-        IP = IPs[0]
-    replacement = {
-        'hostname' : IP,
-        'port' : 1,
-    }
-    cmd = shlex.split(VirtuiConfig.general('vnc', replacement))
-    _run_command(cmd, VirtuiConfig.general('vnc_terminal'), 'Vncviewer %s' % domain.name)
+    def select_next(self):
+        if self.current is None:
+            return
+        self.select(index=self.current+1)
 
-def _null_file(mode='r'):
-    return open('/dev/null', mode)
+    def select_previous(self):
+        if self.current is None:
+            return
+        self.select(index=self.current-1)
+
+    def selection_changed(self, old=None):
+        if old is None:
+            logger.debug("Set selection to %d", self.current)
+        else:
+            logger.debug("Changed selection from %d to %d", old, self.current)
+            self.draw_item(old)
+        self.draw_item(self.current)
+
+    def quit(self):
+        self.ended = True
+
+    def update_domain_status(self, domain):
+        index = self.items.index(domain)
+        self.draw_item(index)
+
+    def power_on(self):
+        if self.current is None:
+            return
+        self.items[self.current].start()
+
+    def power_off(self):
+        if self.current is None:
+            return
+        self.items[self.current].stop()
+
+    def open_console(self):
+        if self.current is None:
+            return
+        domain = self.items[self.current]
+        replacement = {'domain_name' : domain.name}
+        cmd = shlex.split(VirtuiConfig.general('console', replacement))
+        run_command(cmd, VirtuiConfig.general('console_terminal'), 'Console %s' % domain.name)
+
+    def open_viewer(self):
+        if self.current is None:
+            return
+        domain = self.items[self.current]
+        replacement = {'domain_name' : domain.name}
+        cmd = shlex.split(VirtuiConfig.general('viewer', replacement))
+        run_command(cmd, VirtuiConfig.general('viewer_terminal'), 'Viewer %s' % domain.name)
+
+    def draw_item(self, index):
+        window = self.windows["left"]
+        _, width = window.getmaxyx()
+        def draw_domain_status(domain, base_attrs, color_attrs):
+            window.addch(index+1, width-3, ord(" "), base_attrs + color_attrs)
+            if domain.isActive():
+                char = ord('U')
+                color_attrs = curses.color_pair(curses.COLOR_GREEN)
+            else:
+                char = ord('D')
+                color_attrs = curses.color_pair(curses.COLOR_RED)
+            window.addch(index+1, width-2, char, base_attrs + color_attrs)
+        format_string = "%%-2s %%-%ds" % (width - 5)
+        attrs = curses.A_NORMAL
+        if index == self.current:
+            attrs = curses.A_REVERSE
+        domain = self.items[index]
+        window.addstr(index+1, 1,
+                      format_string % (index+1, str(domain)),
+                      attrs + curses.color_pair(curses.COLOR_CYAN))
+        draw_domain_status(domain, attrs, curses.color_pair(curses.COLOR_CYAN))
+        window.noutrefresh()
+
+    def draw_items(self):
+        window = self.windows["left"]
+        window.erase()
+        window.border()
+        for i in range(len(self.items)):
+            self.draw_item(i)
+
+    def __readkeys(self):
+        while True:
+            char = self.stdscr.getch()
+            if char == -1:
+                break
+            self.events.put(Event("key press", char))
+
+    def mainloop(self):
+        class Ticker(threading.Thread):
+            def __init__(self, interval, events):
+                super(Ticker, self).__init__()
+                self.interval = interval
+                self.events = events
+                self.daemon = True
+
+            def run(self):
+                from time import sleep
+                while True:
+                    sleep(self.interval)
+                    self.events.put(Event("tick"))
+
+        self.__libvirt_event_thread.register_for_connection(self.__connection)
+        self.__libvirt_event_thread.daemon = True
+        self.__libvirt_event_thread.start()
+        Ticker(0.1, self.events).start()
+        while not self.ended:
+            self.__readkeys()
+            try:
+                event = self.events.get()
+            except Queue.Empty:
+                continue
+            self.__handle_event(event)
+            curses.doupdate()
+            self.events.task_done()
+        self.__libvirt_event_thread.stop()
+        return 0
+
+def main(stdscr):
+    file_handler = logging.FileHandler("/tmp/virtui_curses_debug", "w")
+    file_handler.setLevel(logging.DEBUG)
+    logger.addHandler(file_handler)
+    logger.setLevel(logging.DEBUG)
+
+    events = Queue.Queue()
+    ui = UI(events, stdscr, True)
+    return ui.mainloop()
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    import sys
+    sys.exit(curses.wrapper(main, *sys.argv[1:]))
