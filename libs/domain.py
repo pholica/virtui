@@ -26,8 +26,8 @@ class Domain(object):
 
     def __ne__(self, other):
         if type(self) != type(other):
-            return False
-        return self._domain == other._domain
+            return True
+        return self._name != other._name
 
     def isActive(self):
         return bool(self._domain.isActive())
