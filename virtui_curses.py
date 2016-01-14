@@ -102,22 +102,9 @@ class UI(object):
         self.draw_items()
 
     def key_press(self, keycode):
-        if keycode == ord('q'):
-            return Event("quit")
-        if keycode == curses.KEY_RESIZE:
-            return Event("window resized")
-        if keycode == curses.KEY_UP:
-            return Event("select previous")
-        if keycode == curses.KEY_DOWN:
-            return Event("select next")
-        if keycode == ord('u'):
-            return Event("power on")
-        if keycode == ord('d'):
-            return Event("power off")
-        if keycode == ord('c'):
-            return Event("open console")
-        if keycode == ord('v'):
-            return Event("open viewer")
+        event_name = VirtuiConfig.key_bindings(keycode)
+        if event_name is not None:
+            return Event(event_name)
         if keycode >= ord('0') and keycode <= ord('9'):
             return Event("select", keycode - ord('0') - 1)
         try:

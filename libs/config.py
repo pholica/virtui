@@ -1,8 +1,12 @@
 #!/bin/env python2
 
+import logging
 import os
+import curses
 
 from ConfigParser import RawConfigParser
+
+logger = logging.getLogger("virtui_curses")
 
 def _config_init(method):
     def wrapped(*args, **kwargs):
@@ -35,6 +39,17 @@ class VirtuiConfig(object):
                 'helpers_path' : os.path.join(os.path.dirname(__file__), 'helpers'),
             },
             'helpers' : {
+            },
+            'key bindings' : {
+                'q' : "quit",
+                'KEY_RESIZE' : "window resized",
+                'KEY_UP' : "select previous",
+                'KEY_DOWN' : "select next",
+                'u' : "power on",
+                'd' : "power off",
+                'c' : "open console",
+                'v' : "open viewer",
+                # 0-9 - don't know how to handle this
             },
             'template-simple' : {
                 'virt-type' : 'kvm',
@@ -112,6 +127,18 @@ class VirtuiConfig(object):
         if load_env:
             VirtuiConfig._options_update(VirtuiConfig._env())
         VirtuiConfig._options_update(overrides)
+        new_key_bindings = {}
+        for key, value in VirtuiConfig._options['key bindings'].iteritems():
+            if len(key) == 1:
+                new_key_bindings[ord(key)] = value
+            elif key.startswith("KEY_"):
+                try:
+                    new_key_bindings[getattr(curses, key)] = value
+                except:
+                    logger.warn("Wrong name of key in config: %s", key)
+            else:
+                logger.warn("Unknown name of key in config: %s", key)
+        VirtuiConfig._options['key bindings'] = new_key_bindings
 
     @staticmethod
     @_config_init
@@ -150,6 +177,14 @@ class VirtuiConfig(object):
         except KeyError:
             pass
         return value
+
+    @staticmethod
+    @_config_init
+    def key_bindings(name):
+        try:
+            return VirtuiConfig._options['key bindings'][name]
+        except KeyError:
+            pass
 
     @staticmethod
     @_config_init
