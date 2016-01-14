@@ -4,6 +4,7 @@ import Queue
 import threading
 import collections
 import curses
+import shlex
 
 import logging
 
@@ -12,6 +13,8 @@ from math import ceil
 from libs import connection, events
 from libs.connection import Connection
 from libs.events import Event, LibvirtEventThread
+from libs.functions import run_command
+from libs.config import VirtuiConfig
 
 logger = logging.getLogger("virtui_curses")
 logger.addHandler(logging.NullHandler())
@@ -26,9 +29,10 @@ class UI(object):
         self.items = []
         self.current = None
         self.__handlers = {}
+        VirtuiConfig.loadconfig('~/.virtui.conf')
         # Event thread needs to be initialized before connection is made
         self.__libvirt_event_thread = LibvirtEventThread(self.events)
-        self.__connection = Connection()
+        self.__connection = Connection(VirtuiConfig.general('LIBVIRT_URI'))
 
         curses.curs_set(0)
         curses.use_default_colors()
@@ -141,8 +145,8 @@ class UI(object):
         self.__register_handler("remove", self.remove)
         self.__register_handler("power on", self.power_on)
         self.__register_handler("power off", self.power_off)
-        self.__register_handler("open console", lambda x: None)
-        self.__register_handler("open viewer", lambda x: None)
+        self.__register_handler("open console", self.open_console)
+        self.__register_handler("open viewer", self.open_viewer)
         self.__register_handler("update domain", self.update_domain_status)
 
     def add(self, items):
@@ -217,6 +221,22 @@ class UI(object):
         if self.current is None:
             return
         self.items[self.current].stop()
+
+    def open_console(self):
+        if self.current is None:
+            return
+        domain = self.items[self.current]
+        replacement = {'domain_name' : domain.name}
+        cmd = shlex.split(VirtuiConfig.general('console', replacement))
+        run_command(cmd, VirtuiConfig.general('console_terminal'), 'Console %s' % domain.name)
+
+    def open_viewer(self):
+        if self.current is None:
+            return
+        domain = self.items[self.current]
+        replacement = {'domain_name' : domain.name}
+        cmd = shlex.split(VirtuiConfig.general('viewer', replacement))
+        run_command(cmd, VirtuiConfig.general('viewer_terminal'), 'Viewer %s' % domain.name)
 
     def draw_item(self, index):
         window = self.windows["left"]
