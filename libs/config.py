@@ -51,6 +51,11 @@ class VirtuiConfig(object):
                 'v' : "open viewer",
                 # 0-9 - don't know how to handle this
             },
+            'colors' : {
+                'foreground' : 'COLOR_CYAN',
+                'domain_active' : 'COLOR_GREEN',
+                'domain_inactive' : 'COLOR_RED',
+            },
             'template-simple' : {
                 'virt-type' : 'kvm',
                 'arch' : None,
@@ -139,6 +144,19 @@ class VirtuiConfig(object):
             else:
                 logger.warn("Unknown name of key in config: %s", key)
         VirtuiConfig._options['key bindings'] = new_key_bindings
+        new_colors = {}
+        for key, value in VirtuiConfig._options['colors'].iteritems():
+            if value.startswith('COLOR_'):
+                try:
+                    new_colors[key] = getattr(curses, value)
+                except:
+                    logger.warn("Wrong name of color in config: %s", value)
+            else:
+                try:
+                    new_colors[key] = int(value)
+                except ValueError:
+                    logger.warn("Unknown name of color in config: %s", value)
+        VirtuiConfig._options['colors'] = new_colors
 
     @staticmethod
     @_config_init
@@ -183,6 +201,14 @@ class VirtuiConfig(object):
     def key_bindings(name):
         try:
             return VirtuiConfig._options['key bindings'][name]
+        except KeyError:
+            pass
+
+    @staticmethod
+    @_config_init
+    def colors(name):
+        try:
+            return VirtuiConfig._options['colors'][name]
         except KeyError:
             pass
 

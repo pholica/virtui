@@ -231,20 +231,22 @@ class UI(object):
             window.addch(index+1, width-3, ord(" "), base_attrs + color_attrs)
             if domain.isActive():
                 char = ord('U')
-                color_attrs = curses.color_pair(curses.COLOR_GREEN)
+                color = VirtuiConfig.colors('domain_active')
             else:
                 char = ord('D')
-                color_attrs = curses.color_pair(curses.COLOR_RED)
+                color = VirtuiConfig.colors('domain_inactive')
+            color_attrs = curses.color_pair(color)
             window.addch(index+1, width-2, char, base_attrs + color_attrs)
         format_string = "%%-2s %%-%ds" % (width - 5)
         attrs = curses.A_NORMAL
         if index == self.current:
             attrs = curses.A_REVERSE
         domain = self.items[index]
+        color_attrs = curses.color_pair(VirtuiConfig.colors('foreground'))
         window.addstr(index+1, 1,
                       format_string % (index+1, str(domain)),
-                      attrs + curses.color_pair(curses.COLOR_CYAN))
-        draw_domain_status(domain, attrs, curses.color_pair(curses.COLOR_CYAN))
+                      attrs + color_attrs)
+        draw_domain_status(domain, attrs, color_attrs)
         window.noutrefresh()
 
     def draw_items(self):
