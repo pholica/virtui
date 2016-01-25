@@ -47,6 +47,7 @@ class VirtuiConfig(object):
                 'KEY_DOWN' : "select next",
                 'u' : "power on",
                 'd' : "power off",
+                'r' : "reset",
                 'c' : "open console",
                 'v' : "open viewer",
                 # 0-9 - don't know how to handle this

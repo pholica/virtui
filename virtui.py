@@ -138,6 +138,7 @@ class UI(object):
         self.__register_handler("remove", self.remove)
         self.__register_handler("power on", self.power_on)
         self.__register_handler("power off", self.power_off)
+        self.__register_handler("reset", self.reset)
         self.__register_handler("open console", self.open_console)
         self.__register_handler("open viewer", self.open_viewer)
         self.__register_handler("update domain", self.update_domain_status)
@@ -210,6 +211,10 @@ class UI(object):
     @_check_selected
     def power_off(self):
         self.items[self.current].stop()
+
+    @_check_selected
+    def reset(self):
+        self.items[self.current].reset()
 
     @_check_selected
     def open_console(self):
