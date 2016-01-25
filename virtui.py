@@ -18,6 +18,13 @@ from libs.config import VirtuiConfig
 logger = logging.getLogger("virtui_curses")
 logger.addHandler(logging.NullHandler())
 
+def _check_selected(method):
+    def wrapped(self, *args, **kwargs):
+        if self.current is None:
+            return
+        return method(self, *args, **kwargs)
+    return wrapped
+
 class UI(object):
     def __init__(self, events, stdscr, log=False):
         super(UI, self).__init__()
@@ -173,14 +180,12 @@ class UI(object):
         self.current = index
         self.events.put(Event("selection changed", old))
 
+    @_check_selected
     def select_next(self):
-        if self.current is None:
-            return
         self.select(index=self.current+1)
 
+    @_check_selected
     def select_previous(self):
-        if self.current is None:
-            return
         self.select(index=self.current-1)
 
     def selection_changed(self, old=None):
@@ -198,27 +203,23 @@ class UI(object):
         index = self.items.index(domain)
         self.draw_item(index)
 
+    @_check_selected
     def power_on(self):
-        if self.current is None:
-            return
         self.items[self.current].start()
 
+    @_check_selected
     def power_off(self):
-        if self.current is None:
-            return
         self.items[self.current].stop()
 
+    @_check_selected
     def open_console(self):
-        if self.current is None:
-            return
         domain = self.items[self.current]
         replacement = {'domain_name' : domain.name}
         cmd = shlex.split(VirtuiConfig.general('console', replacement))
         run_command(cmd, VirtuiConfig.general('console_terminal'), 'Console %s' % domain.name)
 
+    @_check_selected
     def open_viewer(self):
-        if self.current is None:
-            return
         domain = self.items[self.current]
         replacement = {'domain_name' : domain.name}
         cmd = shlex.split(VirtuiConfig.general('viewer', replacement))
