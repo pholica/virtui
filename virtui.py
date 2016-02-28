@@ -32,6 +32,7 @@ class UI(object):
         self.events = events
         self.stdscr = stdscr
         self.log = log
+        self.context = None
         self.items = []
         self.current = None
         self.__handlers = {}
@@ -60,13 +61,17 @@ class UI(object):
         self.events.put(Event("add", sorted(self.__connection.domains(True),
                                             key=str)))
 
-    def __register_handler(self, event_type, func):
-        self.__handlers[event_type] = func
+    def __register_handler(self, event_type, func, context=None):
+        if event_type not in self.__handlers:
+            self.__handlers[event_type] = dict()
+        self.__handlers[event_type][context] = func
 
     def __handle_event(self, event):
         events = None
         try:
-            handler = self.__handlers[event.event_type]
+            handler = self.__handlers[event.event_type].get(self.context)
+            if handler is None:
+                handler = self.__handlers[event.event_type][None]
         except KeyError:
             if event.event_type != "tick":
                 logger.warn("Unhandled event: '%s', ignoring", event.event_type)
